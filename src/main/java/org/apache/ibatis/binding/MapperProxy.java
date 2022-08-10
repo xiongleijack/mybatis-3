@@ -38,11 +38,17 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
 
   private static final long serialVersionUID = -4724728412955527868L;
   private static final int ALLOWED_MODES = MethodHandles.Lookup.PRIVATE | MethodHandles.Lookup.PROTECTED
-      | MethodHandles.Lookup.PACKAGE | MethodHandles.Lookup.PUBLIC;
+    | MethodHandles.Lookup.PACKAGE | MethodHandles.Lookup.PUBLIC;
   private static final Constructor<Lookup> lookupConstructor;
   private static final Method privateLookupInMethod;
   private final SqlSession sqlSession;
+  /**
+   * 需要实现类的接口
+   */
   private final Class<T> mapperInterface;
+  /**
+   * 执行方法缓存
+   */
   private final Map<Method, MapperMethodInvoker> methodCache;
 
   public MapperProxy(SqlSession sqlSession, Class<T> mapperInterface, Map<Method, MapperMethodInvoker> methodCache) {
@@ -51,6 +57,9 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     this.methodCache = methodCache;
   }
 
+  /**
+   * 静态代码块，初始化数据
+   */
   static {
     Method privateLookupIn;
     try {
@@ -59,7 +68,6 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
       privateLookupIn = null;
     }
     privateLookupInMethod = privateLookupIn;
-
     Constructor<Lookup> lookup = null;
     if (privateLookupInMethod == null) {
       // JDK 1.8
@@ -68,8 +76,8 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
         lookup.setAccessible(true);
       } catch (NoSuchMethodException e) {
         throw new IllegalStateException(
-            "There is neither 'privateLookupIn(Class, Lookup)' nor 'Lookup(Class, int)' method in java.lang.invoke.MethodHandles.",
-            e);
+          "There is neither 'privateLookupIn(Class, Lookup)' nor 'Lookup(Class, int)' method in java.lang.invoke.MethodHandles.",
+          e);
       } catch (Exception e) {
         lookup = null;
       }
@@ -90,6 +98,14 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     }
   }
 
+  /**
+   * 缓存放方法
+   * 在 methodCache 缓存中不存在，则使用 function 的方法计算一个类的处理处理方式。根据不通过的 privateLookupInMethod 方法执行不同的逻辑
+   *
+   * @param method 方法
+   * @return 返回数据值
+   * @throws Throwable 抛出异常
+   */
   private MapperMethodInvoker cachedInvoker(Method method) throws Throwable {
     try {
       return MapUtil.computeIfAbsent(methodCache, method, m -> {
@@ -101,7 +117,7 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
               return new DefaultMethodInvoker(getMethodHandleJava9(method));
             }
           } catch (IllegalAccessException | InstantiationException | InvocationTargetException
-              | NoSuchMethodException e) {
+                   | NoSuchMethodException e) {
             throw new RuntimeException(e);
           }
         } else {
@@ -115,15 +131,15 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
   }
 
   private MethodHandle getMethodHandleJava9(Method method)
-      throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
     final Class<?> declaringClass = method.getDeclaringClass();
     return ((Lookup) privateLookupInMethod.invoke(null, declaringClass, MethodHandles.lookup())).findSpecial(
-        declaringClass, method.getName(), MethodType.methodType(method.getReturnType(), method.getParameterTypes()),
-        declaringClass);
+      declaringClass, method.getName(), MethodType.methodType(method.getReturnType(), method.getParameterTypes()),
+      declaringClass);
   }
 
   private MethodHandle getMethodHandleJava8(Method method)
-      throws IllegalAccessException, InstantiationException, InvocationTargetException {
+    throws IllegalAccessException, InstantiationException, InvocationTargetException {
     final Class<?> declaringClass = method.getDeclaringClass();
     return lookupConstructor.newInstance(declaringClass, ALLOWED_MODES).unreflectSpecial(method, declaringClass);
   }
@@ -146,6 +162,9 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     }
   }
 
+  /**
+   * 这个类不知道是什么情况下使用的
+   */
   private static class DefaultMethodInvoker implements MapperMethodInvoker {
     private final MethodHandle methodHandle;
 
